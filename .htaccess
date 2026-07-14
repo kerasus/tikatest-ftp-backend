@@ -1,0 +1,13 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # هدایت درخواست‌های API به Laravel با بازنویسی مسیر به /api/
+    RewriteCond %{REQUEST_URI} ^/api/
+    RewriteRule ^api/(.*)$ api/public/index.php [L,NC,QSA,ENV=REQUEST_URI:/api/$1]
+
+    # هدایت درخواست‌های غیر از فایل‌ها و دایرکتوری‌های موجود به Vue.js
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [L]
+</IfModule>
