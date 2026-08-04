@@ -3,14 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\User;
+use App\Enums\UserRole;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Http\JsonResponse;
+use Spatie\Permission\Models\Role;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpFoundation\Response;
+
 
 class AuthController extends Controller
 {
@@ -197,14 +199,9 @@ class AuthController extends Controller
      */
     public function resetPassword(Request $request, int $user_id): JsonResponse
     {
-        $validator = $request->validate([
-            'new_password' => 'required|string|min:8|confirmed',
+        $request->validate([
+            'new_password' => 'required|string|confirmed',
         ]);
-
-
-        if ($validator->fails()) {
-            return $this->respondWithValidationErrors($validator);
-        }
 
         // Find the user by ID
         $user = User::findOrFail($user_id);
@@ -217,5 +214,56 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'کلمه عبور با موفقیت تغییر یافت.',
         ], 200);
+    }
+
+    /**
+     * اختصاص دادن یک نقش جدید به کاربر بدون حذف نقش‌های قبلی
+     */
+    public function assignRole(Request $request, User $user)
+    {
+        $validated = $request->validate([
+            'role' => ['required', 'string', Rule::in(UserRole::names())],
+        ]);
+
+        $role = Role::findByName($validated['role'], 'web');
+
+        // نقش جدید اضافه می‌شود و نقش‌های قبلی حفظ می‌شوند
+        $user->assignRole($role);
+
+        return response()->json([
+            'message' => 'نقش با موفقیت به کاربر اختصاص یافت.',
+            'user' => [
+                'id' => $user->id,
+                'firstname' => $user->firstname,
+                'lastname' => $user->lastname,
+                'roles' => $user->fresh()->getRoleNames()->values(),
+                'roles_list' => $user->fresh()->roles_list,
+            ],
+        ]);
+    }
+
+
+    public function removeRole(Request $request, User $user)
+    {
+        $validated = $request->validate([
+            'role' => ['required', 'string', Rule::in(UserRole::names())],
+        ]);
+
+        $role = Role::findByName($validated['role'], 'web');
+
+        $user->removeRole($role);
+
+        $freshUser = $user->fresh();
+
+        return response()->json([
+            'message' => 'نقش با موفقیت از کاربر حذف شد.',
+            'user' => [
+                'id' => $freshUser->id,
+                'firstname' => $freshUser->firstname,
+                'lastname' => $freshUser->lastname,
+                'roles' => $freshUser->getRoleNames()->values(),
+                'roles_list' => $freshUser->roles_list,
+            ],
+        ]);
     }
 }

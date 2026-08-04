@@ -220,7 +220,12 @@ class FileController extends Controller
         try {
             $this->transferService->cleanupUpload($request->upload_id);
 
-            return $this->respondWithSuccess(null, 'آپلود لغو شد و فایل‌های موقت پاک شدند.');
+            return $this->respondWithSuccess(
+                [
+                    'message' => 'آپلود لغو شد و فایل‌های موقت پاک شدند.',
+                ],
+                Response::HTTP_OK
+            );
         } catch (\Exception $e) {
             return $this->respondWithError('خطا در پاکسازی', ['detail' => $e->getMessage()]);
         }
