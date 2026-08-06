@@ -12,6 +12,10 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
 use Symfony\Component\HttpFoundation\Response;
+use App\Models\User;
+use App\Enums\UserRole;
+use Illuminate\Validation\Rule;
+
 
 class PermissionController extends Controller
 {
@@ -162,5 +166,161 @@ class PermissionController extends Controller
     public function destroy(Permission $permission): JsonResponse
     {
         return $this->commonDestroy($permission);
+    }
+
+    /**
+     * دریافت پرمیشن‌های مستقیم یک کاربر
+     */
+    public function userPermissions(User $user): JsonResponse
+    {
+        return $this->respondWithSuccess([
+            'user' => [
+                'id' => $user->id,
+                'firstname' => $user->firstname,
+                'lastname' => $user->lastname,
+                'username' => $user->username,
+            ],
+            'permissions' => $user->permissions()
+                ->where('guard_name', 'web')
+                ->orderBy('name')
+                ->get([
+                    'id',
+                    'name',
+                    'guard_name',
+                ]),
+        ]);
+    }
+
+    /**
+     * افزودن یک دسترسی مسیرمحور به دبیر
+     */
+    public function grantUserPermission(Request $request, User $user): JsonResponse
+    {
+        if (!$user->hasRole(UserRole::TEACHER->value)) {
+            return $this->respondWithError(
+                'فقط برای دبیر می‌توان دسترسی مسیرمحور تعریف کرد.',
+                null,
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $actions = collect(PermissionAction::cases())
+            ->pluck('value')
+            ->all();
+
+        $validated = $request->validate([
+            'action' => [
+                'required',
+                'string',
+                Rule::in($actions),
+            ],
+            'season' => [
+                'required',
+                'string',
+                'max:255',
+            ],
+            'lesson' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'grade' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+        ]);
+
+        $permissionName = $this->permissionService->getPermissionName(
+            PermissionAction::from($validated['action']),
+            $validated['season'],
+            $validated['lesson'] ?? null,
+            $validated['grade'] ?? null
+        );
+
+        $permission = Permission::firstOrCreate(
+            [
+                'name' => $permissionName,
+                'guard_name' => 'web',
+            ]
+        );
+
+        $user->givePermissionTo($permission);
+
+        return $this->respondWithSuccess([
+            'message' => 'دسترسی با موفقیت به دبیر اضافه شد.',
+            'permission' => [
+                'id' => $permission->id,
+                'name' => $permission->name,
+                'guard_name' => $permission->guard_name,
+            ],
+        ]);
+    }
+
+    /**
+     * حذف یک دسترسی مسیرمحور از دبیر
+     */
+    public function revokeUserPermission(Request $request, User $user): JsonResponse
+    {
+        if (!$user->hasRole(UserRole::TEACHER->value)) {
+            return $this->respondWithError(
+                'فقط برای دبیر می‌توان دسترسی مسیرمحور تعریف کرد.',
+                null,
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $actions = collect(PermissionAction::cases())
+            ->pluck('value')
+            ->all();
+
+        $validated = $request->validate([
+            'action' => [
+                'required',
+                'string',
+                Rule::in($actions),
+            ],
+            'season' => [
+                'required',
+                'string',
+                'max:255',
+            ],
+            'lesson' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'grade' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+        ]);
+
+        $permissionName = $this->permissionService->getPermissionName(
+            PermissionAction::from($validated['action']),
+            $validated['season'],
+            $validated['lesson'] ?? null,
+            $validated['grade'] ?? null
+        );
+
+        $permission = Permission::where('name', $permissionName)
+            ->where('guard_name', 'web')
+            ->first();
+
+        if (!$permission) {
+            return $this->respondWithError(
+                'این دسترسی وجود ندارد.',
+                null,
+                Response::HTTP_NOT_FOUND
+            );
+        }
+
+        $user->revokePermissionTo($permission);
+
+        return $this->respondWithSuccess([
+            'message' => 'دسترسی با موفقیت از دبیر حذف شد.',
+            'permission' => $permissionName,
+        ]);
     }
 }

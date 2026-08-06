@@ -45,4 +45,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('users/{user_id}/reset-password', [AuthController::class, 'resetPassword'])->name('users.reset.password');
     Route::post('users/{user}/assign-role', [AuthController::class, 'assignRole']);
     Route::post('users/{user}/remove-role', [AuthController::class, 'removeRole']);
+    Route::get(
+        '/users/{user}/permissions',
+        [PermissionController::class, 'userPermissions']
+    );
+
+    Route::post(
+        '/users/{user}/permissions',
+        [PermissionController::class, 'grantUserPermission']
+    );
+
+    Route::delete(
+        '/users/{user}/permissions',
+        [PermissionController::class, 'revokeUserPermission']
+    );
 });
