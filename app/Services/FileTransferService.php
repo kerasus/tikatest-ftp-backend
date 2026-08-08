@@ -44,15 +44,59 @@ class FileTransferService
     /**
      * بررسی وضعیت آپلود (تعداد تکه‌های دریافت شده)
      */
-    public function checkUploadStatus($uploadId)
-    {
+    public function checkUploadStatus(
+        string $uploadId,
+        int $totalChunks
+    ): array {
         $tempPath = "temp_uploads/{$uploadId}";
+
         if (!$this->localDisk->exists($tempPath)) {
-            return 0;
+            return [
+                'received_count' => 0,
+                'missing_chunks' => range(0, $totalChunks - 1),
+                'complete' => false,
+            ];
         }
 
         $files = $this->localDisk->files($tempPath);
-        return count($files);
+
+        $receivedIndexes = [];
+
+        foreach ($files as $file) {
+            if (preg_match('/chunk_(\d+)$/', $file, $matches)) {
+                $receivedIndexes[] = (int) $matches[1];
+            }
+        }
+
+        $receivedIndexes = array_values(array_unique($receivedIndexes));
+        usort($files, function ($a, $b) {
+            preg_match('/chunk_(\d+)$/', $a, $matchA);
+            preg_match('/chunk_(\d+)$/', $b, $matchB);
+
+            return ((int) ($matchA[1] ?? 0)) <=> ((int) ($matchB[1] ?? 0));
+        });
+
+
+        $expectedIndexes = range(0, $totalChunks - 1);
+
+        $missingIndexes = array_values(array_diff(
+            $expectedIndexes,
+            $receivedIndexes
+        ));
+
+        return [
+            'received_count' => count($receivedIndexes),
+            'missing_chunks' => $missingIndexes,
+            'complete' => count($missingIndexes) === 0,
+        ];
+
+
+//        if (!$this->localDisk->exists($tempPath)) {
+//            return 0;
+//        }
+//
+//        $files = $this->localDisk->files($tempPath);
+//        return count($files);
     }
 
     /**

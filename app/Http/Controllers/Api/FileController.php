@@ -167,18 +167,26 @@ class FileController extends Controller
             );
 
             // ۲. بررسی تکمیل بودن آپلود
-            $receivedCount = $this->transferService->checkUploadStatus($request->upload_id);
+//            $receivedCount = $this->transferService->checkUploadStatus($request->upload_id);
+
+            $status = $this->transferService->checkUploadStatus(
+                $request->upload_id,
+                $request->total_chunks
+            );
 
             $response = [
                 'upload_id' => $request->upload_id,
                 'chunk_index' => $request->chunk_index,
-                'received_chunks' => $receivedCount,
+//                'received_chunks' => $receivedCount,
+                'received_chunks' => $status['received_count'],
                 'total_chunks' => $request->total_chunks,
-                'complete' => false
+                'complete' => $status['complete'],
+//                'complete' => false
             ];
 
             // ۳. اگر آخرین تکه بود، عملیات انتقال به FTP را آغاز کن
-            if ($receivedCount == $request->total_chunks) {
+//            if ($receivedCount == $request->total_chunks) {
+            if ($status['complete']) {
 
                 // ساخت مسیر مقصد روی FTP (مثلا: 1404-04/ریاضی/ششم)
                 $destinationPath = "{$request->season}/{$request->lesson}/{$request->grade}";

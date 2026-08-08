@@ -38,7 +38,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // مسیر آپلود: محدودیت را برداریم یا خیلی زیاد کنیم
     // 'throttle:60,1' یعنی ۶۰ درخواست در هر دقیقه (برای آپلود چانکی کم است)
     // پس از میدلور throttle استفاده نمی‌کنیم
-    Route::post('/files/upload', [FileController::class, 'upload'])->withoutMiddleware([\App\Http\Middleware\ThrottleRequests::class]);
+    Route::post('/files/upload', [FileController::class, 'upload'])
+        ->middleware('throttle:file-upload');
+
 
     Route::apiResource('users', '\\'.UserController::class);
     Route::apiResource('permissions', '\\'.PermissionController::class);
