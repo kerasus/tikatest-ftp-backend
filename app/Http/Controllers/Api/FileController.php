@@ -42,7 +42,7 @@ class FileController extends Controller
             'path' => 'nullable|string', // مسیر درخواستی (پیش‌فرض روت)
         ]);
 
-        $path = $request->input('path', '/');
+        $path = $this->normalizeBrowsePath($request->input('path', '/'));
         $user = Auth::user();
 
         if (!$this->permissionService->checkAccess($user, PermissionAction::READ, $path)) {
@@ -50,12 +50,10 @@ class FileController extends Controller
         }
 
         try {
-            $cacheKey = 'ftp_list_' . md5($path);
-            $data = Cache::remember($cacheKey, 9999, function () use ($path, $user) {
-                return $this->managerService->listFiles($path, $user->role);
+            $cacheKey = $this->browseCacheKey($path);
+            $data = Cache::remember($cacheKey, 60*60*24*30, function () use ($path, $user) {
+                return $this->managerService->listFiles($path);
             });
-
-//            $data = $this->managerService->listFiles($path, $user->role);
 
             return $this->respondWithSuccess($data);
 
@@ -141,7 +139,7 @@ class FileController extends Controller
     public function upload(Request $request)
     {
         $request->validate([
-            'upload_id' => 'required|string',
+            'upload_id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]+$/'],
             'chunk_index' => 'required|integer',
             'total_chunks' => 'required|integer',
             'filename' => 'required|string',
@@ -222,7 +220,7 @@ class FileController extends Controller
     public function cancel(Request $request)
     {
         $request->validate([
-            'upload_id' => 'required|string',
+            'upload_id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]+$/'],
         ]);
 
         try {
@@ -255,7 +253,7 @@ class FileController extends Controller
         try {
 
             $newPath = $this->managerService->rename($data['old_path'], $data['new_name']);
-
+            $this->flushDirectoryOfFile($newPath);
             \Log::info('FTP file renamed', [
                 'old_path' => $data['old_path'],
                 'new_path' => $data['new_name']
@@ -290,6 +288,7 @@ class FileController extends Controller
         try {
 
             $ok = $fileManager->delete($data['path']);
+            $this->flushDirectoryOfFile($data['path']);
 
             \Log::info('FTP file deleted', [
                 'path' => $data['path'],
@@ -314,7 +313,7 @@ class FileController extends Controller
             'path' => 'nullable|string',
         ]);
 
-        $path = $data['path'] ?? '/';
+        $path = $this->normalizeBrowsePath($data['path'] ?? '/');
         $user = Auth::user();
 
         if (!$this->permissionService->checkAccess($user, PermissionAction::READ, $path)) {
@@ -322,14 +321,11 @@ class FileController extends Controller
         }
 
         try {
-            $cacheKey = 'ftp_list_' . md5($path);
-
-            Cache::forget($cacheKey);
+            $this->flushDirectory($path);
 
             return $this->respondWithSuccess([
                 'ok' => true,
-                'path' => $path,
-                'cache_key' => $cacheKey,
+                'path' => $path
             ]);
 
         } catch (\Exception $e) {
@@ -366,6 +362,123 @@ class FileController extends Controller
                 Response::HTTP_INTERNAL_SERVER_ERROR
             );
         }
+    }
+
+    public function move(Request $request)
+    {
+        $data = $request->validate([
+            'old_path' => ['required', 'string'],
+            'destination_path' => ['required', 'string'],
+        ]);
+
+        $oldPath = $this->normalizeBrowsePath($data['old_path']);
+        $destinationPath = $this->normalizeBrowsePath($data['destination_path']);
+
+        $user = Auth::user();
+
+        if (
+            !$this->permissionService->checkAccess(
+                $user,
+                PermissionAction::DELETE,
+                $oldPath
+            )
+        ) {
+            return $this->respondForbidden(
+                'شما اجازه دسترسی به فایل مبدأ را ندارید.'
+            );
+        }
+
+        if (
+            !$this->permissionService->checkAccess(
+                $user,
+                PermissionAction::WRITE,
+                $destinationPath
+            )
+        ) {
+            return $this->respondForbidden(
+                'شما اجازه انتقال فایل به مسیر مقصد را ندارید.'
+            );
+        }
+
+        try {
+            $newPath = $this->managerService->move(
+                $oldPath,
+                $destinationPath
+            );
+
+            // فقط بعد از موفقیت انتقال، کش مبدأ و مقصد پاک شود.
+            $this->flushDirectoryOfFile($oldPath);
+            $this->flushDirectory($destinationPath);
+
+            return $this->respondWithSuccess([
+                'ok' => true,
+                'old_path' => $oldPath,
+                'new_path' => $newPath
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('FTP file move failed', [
+                'old_path' => $data['old_path'],
+                'destination_path' => $data['destination_path'],
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->respondWithError(
+                'خطا در انتقال فایل',
+                ['detail' => $e->getMessage()],
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    private function normalizeBrowsePath(?string $path): string
+    {
+        $path = trim((string) $path);
+
+        if ($path === '' || $path === '/') {
+            return '/';
+        }
+
+        return '/' . trim($path, '/');
+    }
+
+    private function browseCacheKey(string $path): string
+    {
+        $normalizedPath = $this->normalizeBrowsePath($path);
+
+        return 'ftp_list_' . md5($normalizedPath);
+    }
+
+
+    private function directoryOfFile(string $filePath): string
+    {
+        $normalizedPath = $this->normalizeBrowsePath($filePath);
+
+        return $this->normalizeBrowsePath(dirname($normalizedPath));
+    }
+
+    private function flushDirectoryOfFile(string $filePath)
+    {
+        $directory = $this->directoryOfFile($filePath);
+        $cacheKey = $this->browseCacheKey($directory);
+        Cache::forget($cacheKey);
+
+        \Log::info('Browse cache cleared', [
+            'directory' => $directory,
+            'cache_key' => $cacheKey
+        ]);
+    }
+
+    private function flushDirectory(string $directoryPath): void
+    {
+        $directory = $this->normalizeBrowsePath($directoryPath);
+        $cacheKey = $this->browseCacheKey($directory);
+
+        Cache::forget($cacheKey);
+
+        \Log::info('Browse cache cleared', [
+            'directory' => $directory,
+            'cache_key' => $cacheKey
+        ]);
     }
 
 }

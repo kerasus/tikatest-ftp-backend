@@ -30,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/files/options', [FileController::class, 'getOptions']);
     Route::post('/files/cancel', [FileController::class, 'cancel']);
     Route::patch('/files/rename', [FileController::class, 'rename']);
+    Route::post('/files/move', [FileController::class, 'move']);
     Route::post('/files/cache/browse/clear', [FileController::class, 'clearBrowseCache']);
     Route::post('/files/cache/options/clear', [FileController::class, 'clearOptionsCache']);
     Route::delete('/files', [FileController::class, 'delete']);

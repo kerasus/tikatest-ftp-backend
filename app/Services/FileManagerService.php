@@ -29,14 +29,13 @@ class FileManagerService
      * دریافت لیست فایل‌ها و پوشه‌های یک مسیر خاص
      * فیلتر کردن بر اساس دسترسی‌های کاربر
      */
-    public function listFiles($path, $userRole)
+    public function listFiles($path)
     {
         // ۱. نرمال‌سازی مسیر (حذف اسلش‌های اضافی)
         $path = '/' . trim($path, '/');
 
         Log::info('FTP listFiles start', [
-            'path' => $path,
-            'userRole' => $userRole
+            'path' => $path
         ]);
 
         try {
@@ -292,10 +291,6 @@ class FileManagerService
             throw new Exception('خطا در تغییر نام فایل');
         }
 
-        $cacheKey = 'ftp_list_' . md5($directory);
-
-        Cache::forget($cacheKey);
-
         return $newPath;
     }
 
@@ -304,12 +299,53 @@ class FileManagerService
      */
     public function delete(string $path): bool
     {
-        $directory = dirname($path);
-        $cacheKey = 'ftp_list_' . md5($directory);
-
-        Cache::forget($cacheKey);
-
         return $this->ftpDisk->delete($path);
     }
 
+    public function move(string $oldPath, string $destinationDirectory): string
+    {
+        $oldPath = '/' . trim($oldPath, '/');
+        $destinationDirectory = '/' . trim($destinationDirectory, '/');
+
+        if (!$this->ftpDisk->directoryExists($destinationDirectory)) {
+            throw new Exception('پوشه مقصد وجود ندارد.');
+        }
+
+        if (!$this->ftpDisk->fileExists($oldPath)) {
+            throw new Exception('فایل مبدأ وجود ندارد.');
+        }
+
+        $filename = basename($oldPath);
+
+        $normalizedFilename = $this->fileNameService->normalize(
+            $filename,
+            $destinationDirectory,
+            $this->ftpDisk
+        );
+
+        $newPath = trim($destinationDirectory, '/')
+            . '/'
+            . $normalizedFilename;
+
+        Log::info('FTP file move started', [
+            'old_path' => $oldPath,
+            'new_path' => $newPath,
+        ]);
+
+        $success = $this->ftpDisk->move(
+            ltrim($oldPath, '/'),
+            ltrim($newPath, '/')
+        );
+
+        if (!$success) {
+            throw new Exception('انتقال فایل در FTP ناموفق بود.');
+        }
+
+        Log::info('FTP file moved', [
+            'old_path' => $oldPath,
+            'new_path' => $newPath
+        ]);
+
+        return '/' . ltrim($newPath, '/');
+    }
 }

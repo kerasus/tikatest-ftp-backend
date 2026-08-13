@@ -101,68 +101,73 @@ class FileTransferService
 
     /**
      * ادغام تکه‌ها و انتقال نهایی به FTP
+     * @throws Exception
      */
     public function finalizeAndTransfer($uploadId, $totalChunks, $originalFilename, $destinationPath)
     {
-        $tempPath = "temp_uploads/{$uploadId}";
-        $files = $this->localDisk->files($tempPath);
+        $lockHandle = $this->acquireUploadLock($uploadId);
 
-        // بررسی اینکه آیا همه تکه‌ها رسیده‌اند
-        if (count($files) != $totalChunks) {
-            throw new Exception("تعداد تکه‌های ناقص است.");
-        }
+        try {
+            $tempPath = "temp_uploads/{$uploadId}";
+            $status = $this->checkUploadStatus($uploadId, $totalChunks);
 
-        // ۱. ساخت نام فایل امن
-        $safeFilename = $this->fileNameService->normalize(
-            $originalFilename,
-            $destinationPath,
-            $this->ftpDisk
-        );
-
-        // ۲. مسیر کامل روی سرور FTP
-        // نکته: مسیر destinationPath شامل فصل/درس/پایه است که از کنترلر می‌آید
-        $finalFtpPath = trim($destinationPath, '/') . '/' . $safeFilename;
-
-        \Log::info("Final FTP Path: " . $finalFtpPath);
-
-        // ۳. باز کردن جریان (Stream) برای نوشتن روی FTP
-        // استفاده از Stream باعث می‌شود فایل کامل حافظه رم را پر نکند
-//        $stream = fopen('php://temp', 'w+');
-
-        // مسیر فایل merge شده روی دیسک
-        $mergedPath = storage_path("app/{$tempPath}/merged.tmp");
-
-        // ساخت فایل merge روی disk
-        $stream = fopen($mergedPath, 'w');
-
-        if (!$stream) {
-            throw new Exception("امکان ایجاد فایل موقت برای ادغام وجود ندارد.");
-        }
-
-        // مرتب‌سازی تکه‌ها و ادغام
-        sort($files); // اطمینان از ترتیب chunk_0, chunk_1...
-//        foreach ($files as $file) {
-//            $chunkContent = $this->localDisk->get($file);
-//            fwrite($stream, $chunkContent);
-//        }
-        foreach ($files as $file) {
-            $chunkStream = $this->localDisk->readStream($file);
-
-            if ($chunkStream === false) {
-                fclose($stream);
-                throw new Exception("خطا در خواندن chunk.");
+            if (!$status['complete']) {
+                throw new Exception('تعداد تکه‌های ناقص است.');
             }
 
-            stream_copy_to_stream($chunkStream, $stream);
+            // ۱. ساخت نام فایل امن
+            $safeFilename = $this->fileNameService->normalize(
+                $originalFilename,
+                $destinationPath,
+                $this->ftpDisk
+            );
 
-            fclose($chunkStream);
-        }
+            // ۲. مسیر کامل روی سرور FTP
+            // نکته: مسیر destinationPath شامل فصل/درس/پایه است که از کنترلر می‌آید
+            $finalFtpPath = trim($destinationPath, '/') . '/' . $safeFilename;
 
-        fclose($stream);
+            \Log::info("Final FTP Path: " . $finalFtpPath);
+
+            // ۳. باز کردن جریان (Stream) برای نوشتن روی FTP
+            // استفاده از Stream باعث می‌شود فایل کامل حافظه رم را پر نکند
+//        $stream = fopen('php://temp', 'w+');
+
+            // مسیر فایل merge شده روی دیسک
+            $mergedPath = storage_path("app/{$tempPath}/merged.tmp");
+
+            // ساخت فایل merge روی disk
+            $stream = fopen($mergedPath, 'w');
+
+            if (!$stream) {
+                throw new Exception("امکان ایجاد فایل موقت برای ادغام وجود ندارد.");
+            }
+
+            // مرتب‌سازی تکه‌ها و ادغام
+            for ($index = 0; $index < $totalChunks; $index++) {
+                $file = "{$tempPath}/chunk_{$index}";
+
+                if (!$this->localDisk->exists($file)) {
+                    fclose($stream);
+                    throw new Exception("تکه شماره {$index} یافت نشد.");
+                }
+
+                $chunkStream = $this->localDisk->readStream($file);
+
+                if ($chunkStream === false) {
+                    fclose($stream);
+                    throw new Exception("خطا در خواندن تکه شماره {$index}.");
+                }
+
+                stream_copy_to_stream($chunkStream, $stream);
+                fclose($chunkStream);
+            }
+
+
+            fclose($stream);
 
 
 
-        // ارسال فایل merge شده به FTP
+            // ارسال فایل merge شده به FTP
 //        $readStream = fopen($mergedPath, 'r');
 //
 //        if (!$readStream) {
@@ -183,25 +188,25 @@ class FileTransferService
 //            throw new Exception("خطا در انتقال فایل به سرور FTP.");
 //        }
 
-        \Log::info("Uploading merged file to FTP", [
-            'path' => $finalFtpPath,
-            'size' => filesize($mergedPath)
-        ]);
+            \Log::info("Uploading merged file to FTP", [
+                'path' => $finalFtpPath,
+                'size' => filesize($mergedPath)
+            ]);
 
-        $success = $this->safeWriteStreamToFtp($mergedPath, $finalFtpPath);
+            $success = $this->safeWriteStreamToFtp($mergedPath, $finalFtpPath);
 
-        if (!$success) {
-            throw new Exception("خطا در انتقال فایل به FTP بعد از چند تلاش.");
-        }
+            if (!$success) {
+                throw new Exception("خطا در انتقال فایل به FTP بعد از چند تلاش.");
+            }
 
-        $directory = dirname($finalFtpPath);
+            $directory = dirname($finalFtpPath);
 
-        $cacheKey = 'ftp_list_' . md5($directory);
+            $cacheKey = 'ftp_list_' . md5($directory);
 
-        Cache::forget($cacheKey);
+            Cache::forget($cacheKey);
 
-        // حذف فایل merge شده
-        unlink($mergedPath);
+            // حذف فایل merge شده
+            unlink($mergedPath);
 
 //        // بازگرداندن نشانگر به ابتدای فایل برای خواندن
 //        rewind($stream);
@@ -218,14 +223,17 @@ class FileTransferService
 //            throw new Exception("خطا در انتقال فایل به سرور FTP.");
 //        }
 
-        // // ۵. پاکسازی فایل‌های موقت از سرور لاراول
-        $this->localDisk->deleteDirectory($tempPath);
+            // // ۵. پاکسازی فایل‌های موقت از سرور لاراول
+            $this->localDisk->deleteDirectory($tempPath);
 
-        return [
-            'filename' => $safeFilename,
-            'path' => $finalFtpPath,
-            'size' => $this->ftpDisk->size($finalFtpPath)
-        ];
+            return [
+                'filename' => $safeFilename,
+                'path' => $finalFtpPath,
+                'size' => $this->ftpDisk->size($finalFtpPath)
+            ];
+        } finally {
+            $this->releaseUploadLock($lockHandle);
+        }
     }
 
     private function safeWriteStreamToFtp(string $localPath, string $ftpPath, int $maxAttempts = 5): bool
@@ -240,8 +248,21 @@ class FileTransferService
 
                 \Log::info('FTP upload attempt', [
                     'attempt' => $attempt,
-                    'path' => $ftpPath
+                    'local_path' => $localPath,
+                    'ftp_path' => $ftpPath,
                 ]);
+
+                if (!file_exists($localPath)) {
+                    \Log::warning('Merged file missing before FTP upload', [
+                        'attempt' => $attempt,
+                        'local_path' => $localPath,
+                        'ftp_path' => $ftpPath,
+                    ]);
+
+                    usleep(300000);
+                    continue;
+                }
+
 
                 $stream = fopen($localPath, 'r');
 
@@ -300,5 +321,36 @@ class FileTransferService
         }
 
         return false;
+    }
+
+    private function acquireUploadLock(string $uploadId)
+    {
+        $lockDirectory = storage_path('app/temp_uploads');
+
+        if (!is_dir($lockDirectory)) {
+            mkdir($lockDirectory, 0775, true);
+        }
+
+        $lockPath = "{$lockDirectory}/{$uploadId}.lock";
+        $handle = fopen($lockPath, 'c');
+
+        if (!$handle) {
+            throw new Exception('امکان ایجاد قفل آپلود وجود ندارد.');
+        }
+
+        if (!flock($handle, LOCK_EX | LOCK_NB)) {
+            fclose($handle);
+            throw new Exception('پردازش نهایی این فایل در حال انجام است.');
+        }
+
+        return $handle;
+    }
+
+    private function releaseUploadLock($handle): void
+    {
+        if ($handle) {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 }
