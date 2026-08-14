@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\UserRole;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use App\Enums\PermissionAction;
@@ -42,23 +43,34 @@ class FileController extends Controller
             'path' => 'nullable|string', // مسیر درخواستی (پیش‌فرض روت)
         ]);
 
-        $path = $this->normalizeBrowsePath($request->input('path', '/'));
+        $path = $this->permissionService->normalizeBrowsePath($request->input('path', '/'));
         $user = Auth::user();
 
-        if (!$this->permissionService->checkAccess($user, PermissionAction::READ, $path)) {
-            return $this->respondForbidden('شما اجازه مشاهده این مسیر را ندارید.');
-        }
-
         try {
+            if (!$this->permissionService->checkAccess($user, PermissionAction::READ, $path)) {
+                return $this->respondForbidden('شما اجازه مشاهده این مسیر را ندارید.');
+            }
+
             $cacheKey = $this->browseCacheKey($path);
             $data = Cache::remember($cacheKey, 60*60*24*30, function () use ($path, $user) {
                 return $this->managerService->listFiles($path);
             });
 
+            // فیلتر کردن لیست برای دبیر
+            if ($user->hasRole(UserRole::TEACHER->value)) {
+                $data['directories'] = $this->permissionService->filterDirectoriesForTeacher(
+                    $data['directories'],
+                    $user,
+                    PermissionAction::READ,
+                    $path
+                );
+            }
+
             return $this->respondWithSuccess($data);
 
         } catch (\Exception $e) {
-            return $this->respondForbidden($e->getMessage());
+//            return $this->respondForbidden($e->getMessage());
+            return $this->respondForbidden('شما اجازه مشاهده این مسیر را ندارید.');
         }
     }
 
@@ -85,7 +97,7 @@ class FileController extends Controller
 
             // اگر دبیر است، باید فقط مسیرهای مجازش را ببیند
             if ($user->hasRole('teacher')) {
-                $filteredTree = $this->filterTreeForTeacher($fullTree, $user);
+                $filteredTree = $this->permissionService->filterTreeForTeacher($fullTree, $user);
                 return $this->respondWithSuccess($filteredTree);
             }
 
@@ -99,38 +111,6 @@ class FileController extends Controller
                 Response::HTTP_INTERNAL_SERVER_ERROR
             );
         }
-    }
-
-    /**
-     * فیلتر کردن ساختار درختی بر اساس پرمیشن‌های دبیر
-     */
-    private function filterTreeForTeacher(array $tree, $user): array
-    {
-        $filtered = [];
-
-        foreach ($tree as $season => $lessons) {
-            foreach ($lessons as $lesson => $grades) {
-                foreach ($grades as $grade) {
-                    // بررسی پرمیشن خواندن برای این مسیر خاص
-                    // از PermissionService استفاده می‌کنیم
-                    $path = "{$season}/{$lesson}/{$grade}";
-
-                    if ($this->permissionService->checkAccess($user, PermissionAction::READ, $path)) {
-                        // اگر دسترسی داشت، به آرایه اضافه کن
-                        if (!isset($filtered[$season])) {
-                            $filtered[$season] = [];
-                        }
-                        if (!isset($filtered[$season][$lesson])) {
-                            $filtered[$season][$lesson] = [];
-                        }
-
-                        $filtered[$season][$lesson][] = $grade;
-                    }
-                }
-            }
-        }
-
-        return $filtered;
     }
 
     /**
@@ -150,7 +130,7 @@ class FileController extends Controller
         ]);
 
         $user = Auth::user();
-        $path = "{$request->season}/{$request->lesson}/{$request->grade}";
+        $path = $this->permissionService->normalizeBrowsePath("{$request->season}/{$request->lesson}/{$request->grade}");
 
         if (!$this->permissionService->checkAccess($user, PermissionAction::WRITE, $path)) {
             return $this->respondForbidden('شما اجازه آپلود در این مسیر را ندارید.');
@@ -313,7 +293,7 @@ class FileController extends Controller
             'path' => 'nullable|string',
         ]);
 
-        $path = $this->normalizeBrowsePath($data['path'] ?? '/');
+        $path = $this->permissionService->normalizeBrowsePath($data['path'] ?? '/');
         $user = Auth::user();
 
         if (!$this->permissionService->checkAccess($user, PermissionAction::READ, $path)) {
@@ -371,15 +351,15 @@ class FileController extends Controller
             'destination_path' => ['required', 'string'],
         ]);
 
-        $oldPath = $this->normalizeBrowsePath($data['old_path']);
-        $destinationPath = $this->normalizeBrowsePath($data['destination_path']);
+        $oldPath = $this->permissionService->normalizeBrowsePath($data['old_path']);
+        $destinationPath = $this->permissionService->normalizeBrowsePath($data['destination_path']);
 
         $user = Auth::user();
 
         if (
             !$this->permissionService->checkAccess(
                 $user,
-                PermissionAction::DELETE,
+                PermissionAction::MOVE,
                 $oldPath
             )
         ) {
@@ -391,7 +371,7 @@ class FileController extends Controller
         if (
             !$this->permissionService->checkAccess(
                 $user,
-                PermissionAction::WRITE,
+                PermissionAction::MOVE,
                 $destinationPath
             )
         ) {
@@ -430,30 +410,18 @@ class FileController extends Controller
         }
     }
 
-    private function normalizeBrowsePath(?string $path): string
-    {
-        $path = trim((string) $path);
-
-        if ($path === '' || $path === '/') {
-            return '/';
-        }
-
-        return '/' . trim($path, '/');
-    }
-
     private function browseCacheKey(string $path): string
     {
-        $normalizedPath = $this->normalizeBrowsePath($path);
+        $normalizedPath = $this->permissionService->normalizeBrowsePath($path);
 
         return 'ftp_list_' . md5($normalizedPath);
     }
 
-
     private function directoryOfFile(string $filePath): string
     {
-        $normalizedPath = $this->normalizeBrowsePath($filePath);
+        $normalizedPath = $this->permissionService->normalizeBrowsePath($filePath);
 
-        return $this->normalizeBrowsePath(dirname($normalizedPath));
+        return $this->permissionService->normalizeBrowsePath(dirname($normalizedPath));
     }
 
     private function flushDirectoryOfFile(string $filePath)
@@ -470,7 +438,7 @@ class FileController extends Controller
 
     private function flushDirectory(string $directoryPath): void
     {
-        $directory = $this->normalizeBrowsePath($directoryPath);
+        $directory = $this->permissionService->normalizeBrowsePath($directoryPath);
         $cacheKey = $this->browseCacheKey($directory);
 
         Cache::forget($cacheKey);
