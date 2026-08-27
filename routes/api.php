@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\PermissionController;
+use App\Http\Controllers\Api\FileActivityLogController;
 
 /*
 |--------------------------------------------------------------------------
@@ -48,18 +49,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('users/{user_id}/reset-password', [AuthController::class, 'resetPassword'])->name('users.reset.password');
     Route::post('users/{user}/assign-role', [AuthController::class, 'assignRole']);
     Route::post('users/{user}/remove-role', [AuthController::class, 'removeRole']);
-    Route::get(
-        '/users/{user}/permissions',
-        [PermissionController::class, 'userPermissions']
-    );
+    Route::get('/users/{user}/permissions', [PermissionController::class, 'userPermissions']);
+    Route::post('/users/{user}/permissions', [PermissionController::class, 'grantUserPermission']);
+    Route::delete('/users/{user}/permissions', [PermissionController::class, 'revokeUserPermission']);
 
-    Route::post(
-        '/users/{user}/permissions',
-        [PermissionController::class, 'grantUserPermission']
-    );
-
-    Route::delete(
-        '/users/{user}/permissions',
-        [PermissionController::class, 'revokeUserPermission']
-    );
+    Route::get('file-activity-logs', [FileActivityLogController::class, 'index']);
+    Route::get('file-activity-logs/{fileActivityLog}', [FileActivityLogController::class, 'show']);
 });

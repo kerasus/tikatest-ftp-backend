@@ -6,11 +6,13 @@ use App\Enums\UserRole;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use App\Enums\PermissionAction;
+use App\Enums\FileActivityStatus;
+use App\Services\PermissionService;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\Controller;
-use App\Services\PermissionService;
 use App\Services\FileManagerService;
 use App\Services\FileTransferService;
+use App\Services\FileActivityLogger;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -21,15 +23,18 @@ class FileController extends Controller
     protected $transferService;
     protected $managerService;
     protected $permissionService;
+    protected $activityLogger;
 
     public function __construct(
         FileTransferService $transferService,
         FileManagerService $managerService,
-        PermissionService $permissionService
+        PermissionService $permissionService,
+        FileActivityLogger $activityLogger
     ) {
         $this->transferService = $transferService;
         $this->managerService = $managerService;
         $this->permissionService = $permissionService;
+        $this->activityLogger = $activityLogger;
 
         $this->middleware('auth:sanctum');
     }
@@ -135,7 +140,10 @@ class FileController extends Controller
         if (!$this->permissionService->checkAccess($user, PermissionAction::WRITE, $path)) {
             return $this->respondForbidden('شما اجازه آپلود در این مسیر را ندارید.');
         }
-
+        // ساخت مسیر مقصد روی FTP (مثلا: 1404-04/ریاضی/ششم)
+        $destinationPath = $this->permissionService->normalizeBrowsePath(
+            "{$request->season}/{$request->lesson}/{$request->grade}"
+        );
         try {
             // ۱. ذخیره تکه روی سرور لاراول (لوکال)
             $this->transferService->storeChunk(
@@ -165,10 +173,6 @@ class FileController extends Controller
             // ۳. اگر آخرین تکه بود، عملیات انتقال به FTP را آغاز کن
 //            if ($receivedCount == $request->total_chunks) {
             if ($status['complete']) {
-
-                // ساخت مسیر مقصد روی FTP (مثلا: 1404-04/ریاضی/ششم)
-                $destinationPath = "{$request->season}/{$request->lesson}/{$request->grade}";
-
                 $result = $this->transferService->finalizeAndTransfer(
                     $request->upload_id,
                     $request->total_chunks,
@@ -176,10 +180,14 @@ class FileController extends Controller
                     $destinationPath
                 );
 
-                // ذخیره لاگ در دیتابیس (اختیاری)
-                // UploadLog::create([...]);
-
                 $this->flushDirectory($destinationPath);
+
+                $this->activityLogger->log('upload', FileActivityStatus::SUCCESS, [
+                    'path'        => "{$destinationPath}/{$request->filename}",
+                    'file_name'   => $request->filename,
+                    'upload_id'   => $request->upload_id,
+                    'file_size'   => $result['size'] ?? null,
+                ]);
 
                 $response['complete'] = true;
                 $response['file_info'] = $result;
@@ -188,6 +196,20 @@ class FileController extends Controller
             return $this->respondWithSuccess($response);
 
         } catch (\Exception $e) {
+            $this->activityLogger->log('upload', FileActivityStatus::FAILED, [
+                'path' => "{$destinationPath}/{$request->filename}",
+                'file_name' => $request->filename,
+                'upload_id' => $request->upload_id,
+                'error_message' => $e->getMessage(),
+                'meta' => [
+                    'chunk_index' => $request->chunk_index,
+                    'total_chunks' => $request->total_chunks,
+                    'season' => $request->season,
+                    'lesson' => $request->lesson,
+                    'grade' => $request->grade,
+                ],
+            ]);
+
             return $this->respondWithError(
                 'خطا در پردازش فایل',
                 ['detail' => $e->getMessage()],
@@ -232,10 +254,23 @@ class FileController extends Controller
             return $this->respondForbidden('شما اجازه تغییر نام در این مسیر را ندارید.');
         }
 
-        try {
+        $newPath = null;
 
-            $newPath = $this->managerService->rename($data['old_path'], $data['new_name']);
+        try {
+            $newPath = $this->managerService->rename(
+                $data['old_path'],
+                $data['new_name']
+            );
+
+            $this->flushDirectoryOfFile($data['old_path']);
             $this->flushDirectoryOfFile($newPath);
+
+            $this->activityLogger->log('rename', FileActivityStatus::SUCCESS, [
+                'source_path'      => $data['old_path'],
+                'destination_path' => $newPath,
+                'file_name'        => $data['new_name'],
+            ]);
+
             \Log::info('FTP file renamed', [
                 'old_path' => $data['old_path'],
                 'new_path' => $data['new_name']
@@ -247,6 +282,19 @@ class FileController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            $this->activityLogger->log('rename', FileActivityStatus::FAILED, [
+                'source_path' => $data['old_path'],
+                'destination_path' => $newPath,
+                'file_name' => $data['new_name'],
+                'error_message' => $e->getMessage(),
+            ]);
+
+            \Log::error('FTP file rename failed', [
+                'old_path' => $data['old_path'],
+                'new_name' => $data['new_name'],
+                'error' => $e->getMessage(),
+            ]);
+
             return $this->respondWithError(
                 'خطا در تغییر نام',
                 ['detail' => $e->getMessage()],
@@ -270,7 +318,19 @@ class FileController extends Controller
         try {
 
             $ok = $fileManager->delete($data['path']);
+
+            if (!$ok) {
+                throw new \RuntimeException(
+                    'حذف فایل از FTP با موفقیت انجام نشد.'
+                );
+            }
+
             $this->flushDirectoryOfFile($data['path']);
+
+            $this->activityLogger->log('delete', FileActivityStatus::SUCCESS, [
+                'path'      => $data['path'],
+                'file_name' => basename($data['path']),
+            ]);
 
             \Log::info('FTP file deleted', [
                 'path' => $data['path'],
@@ -281,6 +341,17 @@ class FileController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            $this->activityLogger->log('delete', FileActivityStatus::FAILED, [
+                'path' => $data['path'],
+                'file_name' => basename($data['path']),
+                'error_message' => $e->getMessage(),
+            ]);
+
+            \Log::error('FTP file delete failed', [
+                'path' => $data['path'],
+                'error' => $e->getMessage(),
+            ]);
+
             return $this->respondWithError(
                 'خطا در حذف فایل',
                 ['detail' => $e->getMessage()],
@@ -392,6 +463,13 @@ class FileController extends Controller
             $this->flushDirectoryOfFile($oldPath);
             $this->flushDirectory($destinationPath);
 
+
+            $this->activityLogger->log('move', FileActivityStatus::SUCCESS, [
+                'source_path'      => $oldPath,
+                'destination_path' => $destinationPath,
+                'file_name'        => basename($oldPath),
+            ]);
+
             return $this->respondWithSuccess([
                 'ok' => true,
                 'old_path' => $oldPath,
@@ -402,6 +480,12 @@ class FileController extends Controller
                 'old_path' => $data['old_path'],
                 'destination_path' => $data['destination_path'],
                 'error' => $e->getMessage(),
+            ]);
+
+            $this->activityLogger->log('upload', FileActivityStatus::FAILED, [
+                'upload_id'     => $request->upload_id,
+                'file_name'     => $request->filename,
+                'error_message' => $e->getMessage(),
             ]);
 
             return $this->respondWithError(
