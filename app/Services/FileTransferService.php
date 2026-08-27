@@ -314,13 +314,22 @@ class FileTransferService
     public function cleanupUpload($uploadId)
     {
         $tempPath = "temp_uploads/{$uploadId}";
+        $lockPath = "temp_uploads/{$uploadId}.lock";
+        $cleaned = false;
 
+        // ۱. پاک کردن پوشه چانک‌ها
         if ($this->localDisk->exists($tempPath)) {
             $this->localDisk->deleteDirectory($tempPath);
-            return true;
+            $cleaned = true;
         }
 
-        return false;
+        // ۲. پاک کردن فایل قفل (Lock)
+        if ($this->localDisk->exists($lockPath)) {
+            $this->localDisk->delete($lockPath);
+            $cleaned = true;
+        }
+
+        return $cleaned;
     }
 
     private function acquireUploadLock(string $uploadId)

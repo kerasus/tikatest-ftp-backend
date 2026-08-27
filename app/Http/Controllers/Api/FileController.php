@@ -179,6 +179,8 @@ class FileController extends Controller
                 // ذخیره لاگ در دیتابیس (اختیاری)
                 // UploadLog::create([...]);
 
+                $this->flushDirectory($destinationPath);
+
                 $response['complete'] = true;
                 $response['file_info'] = $result;
             }
