@@ -3,7 +3,9 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Carbon\Carbon;
 
 class CleanupTempUploads extends Command
 {
@@ -13,15 +15,19 @@ class CleanupTempUploads extends Command
     public function handle()
     {
         $this->info('شروع پاکسازی فایل‌های موقت...');
+        Log::info('[UploadsCleanup] شروع اجرای دستور پاکسازی فایل‌های موقت.');
 
         $disk = Storage::disk('local');
 
         if (!$disk->exists('temp_uploads')) {
-            $this->info('پوشه temp_uploads وجود ندارد.');
+            $msg = 'پوشه temp_uploads وجود ندارد.';
+            $this->info($msg);
+            Log::info("[UploadsCleanup] {$msg}");
             return;
         }
 
         $directories = $disk->directories('temp_uploads');
+        $totalDirectories = count($directories);
 
         $count = 0;
         $now = now();
@@ -45,16 +51,19 @@ class CleanupTempUploads extends Command
             }
 
             // محاسبه اختلاف زمانی
-            $diffInMinutes = $now->diffInMinutes(\Carbon\Carbon::createFromTimestamp($timestamp));
+            $diffInMinutes = $now->diffInMinutes(Carbon::createFromTimestamp($timestamp));
 
             // اگر بیشتر از ۱۲۰ دقیقه (۲ ساعت) از آخرین تغییر گذشته است
             if ($diffInMinutes > 120) {
                 $disk->deleteDirectory($dir);
                 $count++;
                 $this->line("پوشه {$dir} پاک شد.");
+                Log::info("[UploadsCleanup] پوشه {$dir} به علت گذشت {$diffInMinutes} دقیقه حذف شد.");
             }
         }
 
-        $this->info("پاکسازی پایان یافت. {$count} پوشه حذف شد.");
+        $summary = "پاکسازی پایان یافت. از مجموع {$totalDirectories} پوشه، {$count} پوشه قدیمی حذف شد.";
+        $this->info($summary);
+        Log::info("[UploadsCleanup] {$summary}");
     }
 }
