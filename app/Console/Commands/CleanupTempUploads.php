@@ -32,10 +32,22 @@ class CleanupTempUploads extends Command
         $count = 0;
         $now = now();
 
+        // پاکسازی فایل‌های lock مستقیم در ریشه temp_uploads
+        $rootFiles = $disk->files('temp_uploads');
+        foreach ($rootFiles as $rootFile) {
+            if (str_ends_with($rootFile, '.lock')) {
+                $fileTime = $disk->lastModified($rootFile);
+                if ($now->diffInMinutes(Carbon::createFromTimestamp($fileTime)) > 120) {
+                    $disk->delete($rootFile);
+                    Log::info("[UploadsCleanup] فایل قفل {$rootFile} حذف شد.");
+                }
+            }
+        }
+
         foreach ($directories as $dir) {
             // دریافت زمان تغییر آخرین فایل در پوشه
             // اگر پوشه خالی باشد، زمان ساخت پوشه را می‌گیریم
-            $files = $disk->files($dir);
+            $files = $disk->allFiles($dir);
 
             if (empty($files)) {
                 $timestamp = $disk->lastModified($dir);
