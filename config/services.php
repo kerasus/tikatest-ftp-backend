@@ -47,4 +47,9 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'sanjad' => [
+        'base_url'     => env('SANJAD_SERVICE_BASE_URL'),
+        'token'        => env('SANJAD_SERVICE_TOKEN'),          // برای درخواست‌های خروجی به سنجاد
+        'inbound_key'  => env('SANJAD_SERVICE_INBOUND_API_KEY'),    // برای بررسی درخواست‌های ورودی از سنجاد
+    ],
 ];

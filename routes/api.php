@@ -1,10 +1,12 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Middleware\VerifySanjadRequest;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\PermissionController;
+use App\Http\Controllers\Api\SanjadConnectorController;
 use App\Http\Controllers\Api\FileActivityLogController;
 
 /*
@@ -56,3 +58,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('file-activity-logs', [FileActivityLogController::class, 'index']);
     Route::get('file-activity-logs/{fileActivityLog}', [FileActivityLogController::class, 'show']);
 });
+
+
+// روت ورودی که سرور سنجاد برای گرفتن فایل‌های یک کلاس صدا می‌زند (محافظت شده با میدلور اختصاصی)
+Route::middleware(VerifySanjadRequest::class)->get('/sanjad/classes/{classId}/files', [SanjadConnectorController::class, 'getFilesByClassId']);
