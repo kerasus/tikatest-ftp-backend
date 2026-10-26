@@ -34,9 +34,9 @@ class FileManagerService
         // ۱. نرمال‌سازی مسیر (حذف اسلش‌های اضافی)
         $path = '/' . trim($path, '/');
 
-        Log::info('FTP listFiles start', [
-            'path' => $path
-        ]);
+//        Log::info('FTP listFiles start', [
+//            'path' => $path
+//        ]);
 
         try {
             $items = [];
@@ -55,10 +55,10 @@ class FileManagerService
                     break;
                 }
 
-                Log::warning('FTP empty result', [
-                    'path' => $path,
-                    'attempt' => $attempt
-                ]);
+//                Log::warning('FTP empty result', [
+//                    'path' => $path,
+//                    'attempt' => $attempt
+//                ]);
 
                 usleep(1000000); // 1s
             }
@@ -114,10 +114,10 @@ class FileManagerService
                 }
             }
 
-            Log::info('FTP list result', [
-                'directories' => count($directories),
-                'files' => count($files)
-            ]);
+//            Log::info('FTP list result', [
+//                'directories' => count($directories),
+//                'files' => count($files)
+//            ]);
 
             return [
                 'current_path' => $path,
@@ -127,10 +127,10 @@ class FileManagerService
 
         } catch (\Throwable $e) {
 
-            Log::error('FTP listFiles failed', [
-                'path' => $path,
-                'error' => $e->getMessage()
-            ]);
+//            Log::error('FTP listFiles failed', [
+//                'path' => $path,
+//                'error' => $e->getMessage()
+//            ]);
 
             return [
                 'current_path' => $path,
@@ -148,7 +148,7 @@ class FileManagerService
     {
 
         try {
-            Log::info('FTP DirectoryTree start');
+//            Log::info('FTP DirectoryTree start');
 
             $tree = [];
 
@@ -205,16 +205,16 @@ class FileManagerService
 
             ksort($tree);
 
-            Log::info('FTP DirectoryTree result', [
-                'seasons' => count($tree)
-            ]);
+//            Log::info('FTP DirectoryTree result', [
+//                'seasons' => count($tree)
+//            ]);
 
             return $tree;
 
         } catch (\Throwable $e) {
-            Log::error('FTP getDirectoryTree failed', [
-                'error' => $e->getMessage()
-            ]);
+//            Log::error('FTP getDirectoryTree failed', [
+//                'error' => $e->getMessage()
+//            ]);
 
             return [];
         }
@@ -233,34 +233,34 @@ class FileManagerService
             $attempt++;
 
             try {
-                Log::info('FTP safeListContents attempt', [
-                    'path' => $path,
-                    'attempt' => $attempt
-                ]);
+//                Log::info('FTP safeListContents attempt', [
+//                    'path' => $path,
+//                    'attempt' => $attempt
+//                ]);
 
                 $ftpDisk = $this->getStorageDisk();
                 $items = $ftpDisk->listContents($path)->toArray();
 
                 if (!empty($items)) {
-                    Log::info('FTP safeListContents success', [
-                        'path' => $path,
-                        'attempt' => $attempt,
-                        'count' => count($items)
-                    ]);
+//                    Log::info('FTP safeListContents success', [
+//                        'path' => $path,
+//                        'attempt' => $attempt,
+//                        'count' => count($items)
+//                    ]);
 
                     return $items;
                 }
 
-                Log::warning('FTP safeListContents empty', [
-                    'path' => $path,
-                    'attempt' => $attempt
-                ]);
+//                Log::warning('FTP safeListContents empty', [
+//                    'path' => $path,
+//                    'attempt' => $attempt
+//                ]);
             } catch (\Throwable $e) {
-                Log::warning('FTP safeListContents failed', [
-                    'path' => $path,
-                    'attempt' => $attempt,
-                    'error' => $e->getMessage()
-                ]);
+//                Log::warning('FTP safeListContents failed', [
+//                    'path' => $path,
+//                    'attempt' => $attempt,
+//                    'error' => $e->getMessage()
+//                ]);
             }
 
             usleep(1000000);
@@ -327,10 +327,10 @@ class FileManagerService
             . '/'
             . $normalizedFilename;
 
-        Log::info('FTP file move started', [
-            'old_path' => $oldPath,
-            'new_path' => $newPath,
-        ]);
+//        Log::info('FTP file move started', [
+//            'old_path' => $oldPath,
+//            'new_path' => $newPath,
+//        ]);
 
         $success = $this->ftpDisk->move(
             ltrim($oldPath, '/'),
@@ -341,10 +341,10 @@ class FileManagerService
             throw new Exception('انتقال فایل در FTP ناموفق بود.');
         }
 
-        Log::info('FTP file moved', [
-            'old_path' => $oldPath,
-            'new_path' => $newPath
-        ]);
+//        Log::info('FTP file moved', [
+//            'old_path' => $oldPath,
+//            'new_path' => $newPath
+//        ]);
 
         return '/' . ltrim($newPath, '/');
     }

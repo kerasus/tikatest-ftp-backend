@@ -271,10 +271,10 @@ class FileController extends Controller
                 'file_name'        => $data['new_name'],
             ]);
 
-            \Log::info('FTP file renamed', [
-                'old_path' => $data['old_path'],
-                'new_path' => $data['new_name']
-            ]);
+//            \Log::info('FTP file renamed', [
+//                'old_path' => $data['old_path'],
+//                'new_path' => $data['new_name']
+//            ]);
 
             return $this->respondWithSuccess([
                 'ok' => true,
@@ -289,11 +289,11 @@ class FileController extends Controller
                 'error_message' => $e->getMessage(),
             ]);
 
-            \Log::error('FTP file rename failed', [
-                'old_path' => $data['old_path'],
-                'new_name' => $data['new_name'],
-                'error' => $e->getMessage(),
-            ]);
+//            \Log::error('FTP file rename failed', [
+//                'old_path' => $data['old_path'],
+//                'new_name' => $data['new_name'],
+//                'error' => $e->getMessage(),
+//            ]);
 
             return $this->respondWithError(
                 'خطا در تغییر نام',
@@ -332,9 +332,9 @@ class FileController extends Controller
                 'file_name' => basename($data['path']),
             ]);
 
-            \Log::info('FTP file deleted', [
-                'path' => $data['path'],
-            ]);
+//            \Log::info('FTP file deleted', [
+//                'path' => $data['path'],
+//            ]);
 
             return $this->respondWithSuccess([
                 'ok' => (bool) $ok,
@@ -347,10 +347,10 @@ class FileController extends Controller
                 'error_message' => $e->getMessage(),
             ]);
 
-            \Log::error('FTP file delete failed', [
-                'path' => $data['path'],
-                'error' => $e->getMessage(),
-            ]);
+//            \Log::error('FTP file delete failed', [
+//                'path' => $data['path'],
+//                'error' => $e->getMessage(),
+//            ]);
 
             return $this->respondWithError(
                 'خطا در حذف فایل',
@@ -476,11 +476,11 @@ class FileController extends Controller
                 'new_path' => $newPath
             ]);
         } catch (\Throwable $e) {
-            \Log::error('FTP file move failed', [
-                'old_path' => $data['old_path'],
-                'destination_path' => $data['destination_path'],
-                'error' => $e->getMessage(),
-            ]);
+//            \Log::error('FTP file move failed', [
+//                'old_path' => $data['old_path'],
+//                'destination_path' => $data['destination_path'],
+//                'error' => $e->getMessage(),
+//            ]);
 
             $this->activityLogger->log('upload', FileActivityStatus::FAILED, [
                 'upload_id'     => $request->upload_id,
@@ -500,7 +500,7 @@ class FileController extends Controller
     {
         $normalizedPath = $this->permissionService->normalizeBrowsePath($path);
 
-        return 'ftp_list_' . md5($normalizedPath);
+        return FileTransferService::getListCacheKey($normalizedPath);
     }
 
     private function directoryOfFile(string $filePath): string
@@ -516,10 +516,10 @@ class FileController extends Controller
         $cacheKey = $this->browseCacheKey($directory);
         Cache::forget($cacheKey);
 
-        \Log::info('Browse cache cleared', [
-            'directory' => $directory,
-            'cache_key' => $cacheKey
-        ]);
+//        \Log::info('Browse cache cleared', [
+//            'directory' => $directory,
+//            'cache_key' => $cacheKey
+//        ]);
     }
 
     private function flushDirectory(string $directoryPath): void
@@ -529,10 +529,10 @@ class FileController extends Controller
 
         Cache::forget($cacheKey);
 
-        \Log::info('Browse cache cleared', [
-            'directory' => $directory,
-            'cache_key' => $cacheKey
-        ]);
+//        \Log::info('Browse cache cleared', [
+//            'directory' => $directory,
+//            'cache_key' => $cacheKey
+//        ]);
     }
 
 }

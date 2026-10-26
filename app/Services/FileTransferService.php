@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
+use Exception;
+use App\Services\SanjadSyncService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use Exception;
 
 class FileTransferService
 {
@@ -126,7 +126,7 @@ class FileTransferService
             // نکته: مسیر destinationPath شامل فصل/درس/پایه است که از کنترلر می‌آید
             $finalFtpPath = trim($destinationPath, '/') . '/' . $safeFilename;
 
-            \Log::info("Final FTP Path: " . $finalFtpPath);
+//            \Log::info("Final FTP Path: " . $finalFtpPath);
 
             // ۳. باز کردن جریان (Stream) برای نوشتن روی FTP
             // استفاده از Stream باعث می‌شود فایل کامل حافظه رم را پر نکند
@@ -188,10 +188,10 @@ class FileTransferService
 //            throw new Exception("خطا در انتقال فایل به سرور FTP.");
 //        }
 
-            \Log::info("Uploading merged file to FTP", [
-                'path' => $finalFtpPath,
-                'size' => filesize($mergedPath)
-            ]);
+//            \Log::info("Uploading merged file to FTP", [
+//                'path' => $finalFtpPath,
+//                'size' => filesize($mergedPath)
+//            ]);
 
             $success = $this->safeWriteStreamToFtp($mergedPath, $finalFtpPath);
 
@@ -201,9 +201,11 @@ class FileTransferService
 
             $directory = dirname($finalFtpPath);
 
-            $cacheKey = 'ftp_list_' . md5($directory);
+            $cacheKey = self::getListCacheKey($directory);
+            $ftpCacheKey = SanjadSyncService::getFtpCacheKey($directory);
 
             Cache::forget($cacheKey);
+            Cache::forget($ftpCacheKey);
 
             // حذف فایل merge شده
             unlink($mergedPath);
@@ -246,18 +248,18 @@ class FileTransferService
 
             try {
 
-                \Log::info('FTP upload attempt', [
-                    'attempt' => $attempt,
-                    'local_path' => $localPath,
-                    'ftp_path' => $ftpPath,
-                ]);
+//                \Log::info('FTP upload attempt', [
+//                    'attempt' => $attempt,
+//                    'local_path' => $localPath,
+//                    'ftp_path' => $ftpPath,
+//                ]);
 
                 if (!file_exists($localPath)) {
-                    \Log::warning('Merged file missing before FTP upload', [
-                        'attempt' => $attempt,
-                        'local_path' => $localPath,
-                        'ftp_path' => $ftpPath,
-                    ]);
+//                    \Log::warning('Merged file missing before FTP upload', [
+//                        'attempt' => $attempt,
+//                        'local_path' => $localPath,
+//                        'ftp_path' => $ftpPath,
+//                    ]);
 
                     usleep(300000);
                     continue;
@@ -279,25 +281,25 @@ class FileTransferService
 
                 if ($success) {
 
-                    \Log::info('FTP upload success', [
-                        'attempt' => $attempt,
-                        'path' => $ftpPath
-                    ]);
+//                    \Log::info('FTP upload success', [
+//                        'attempt' => $attempt,
+//                        'path' => $ftpPath
+//                    ]);
 
                     return true;
                 }
 
-                \Log::warning('FTP upload failed', [
-                    'attempt' => $attempt,
-                    'path' => $ftpPath
-                ]);
+//                \Log::warning('FTP upload failed', [
+//                    'attempt' => $attempt,
+//                    'path' => $ftpPath
+//                ]);
 
             } catch (\Throwable $e) {
 
-                \Log::warning('FTP upload exception', [
-                    'attempt' => $attempt,
-                    'error' => $e->getMessage()
-                ]);
+//                \Log::warning('FTP upload exception', [
+//                    'attempt' => $attempt,
+//                    'error' => $e->getMessage()
+//                ]);
 
             }
 
@@ -361,5 +363,10 @@ class FileTransferService
             flock($handle, LOCK_UN);
             fclose($handle);
         }
+    }
+
+    public static function getListCacheKey(string $path): string
+    {
+        return 'ftp_list_' . md5('/' . trim($path, '/'));
     }
 }

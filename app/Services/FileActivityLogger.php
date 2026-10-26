@@ -44,10 +44,10 @@ class FileActivityLogger
             ]);
         } catch (\Throwable $e) {
             // در صورت خطا در ثبت دیتابیس، خطا در لاگ سیستم ثبت می‌شود تا فرآیند اصلی کاربر قطع نشود
-            Log::error('Failed to write FileActivityLog: ' . $e->getMessage(), [
-                'action' => $action,
-                'data'   => $data,
-            ]);
+//            Log::error('Failed to write FileActivityLog: ' . $e->getMessage(), [
+//                'action' => $action,
+//                'data'   => $data,
+//            ]);
             return null;
         }
     }

@@ -15,14 +15,14 @@ class CleanupTempUploads extends Command
     public function handle()
     {
         $this->info('شروع پاکسازی فایل‌های موقت...');
-        Log::info('[UploadsCleanup] شروع اجرای دستور پاکسازی فایل‌های موقت.');
+//        Log::info('[UploadsCleanup] شروع اجرای دستور پاکسازی فایل‌های موقت.');
 
         $disk = Storage::disk('local');
 
         if (!$disk->exists('temp_uploads')) {
             $msg = 'پوشه temp_uploads وجود ندارد.';
             $this->info($msg);
-            Log::info("[UploadsCleanup] {$msg}");
+//            Log::info("[UploadsCleanup] {$msg}");
             return;
         }
 
@@ -39,7 +39,7 @@ class CleanupTempUploads extends Command
                 $fileTime = $disk->lastModified($rootFile);
                 if ($now->diffInMinutes(Carbon::createFromTimestamp($fileTime)) > 120) {
                     $disk->delete($rootFile);
-                    Log::info("[UploadsCleanup] فایل قفل {$rootFile} حذف شد.");
+//                    Log::info("[UploadsCleanup] فایل قفل {$rootFile} حذف شد.");
                 }
             }
         }
@@ -70,12 +70,12 @@ class CleanupTempUploads extends Command
                 $disk->deleteDirectory($dir);
                 $count++;
                 $this->line("پوشه {$dir} پاک شد.");
-                Log::info("[UploadsCleanup] پوشه {$dir} به علت گذشت {$diffInMinutes} دقیقه حذف شد.");
+//                Log::info("[UploadsCleanup] پوشه {$dir} به علت گذشت {$diffInMinutes} دقیقه حذف شد.");
             }
         }
 
         $summary = "پاکسازی پایان یافت. از مجموع {$totalDirectories} پوشه، {$count} پوشه قدیمی حذف شد.";
         $this->info($summary);
-        Log::info("[UploadsCleanup] {$summary}");
+//        Log::info("[UploadsCleanup] {$summary}");
     }
 }
