@@ -1,13 +1,13 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use App\Http\Middleware\VerifySanjadRequest;
-use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\FileActivityLogController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\SanjadConnectorController;
-use App\Http\Controllers\Api\FileActivityLogController;
+use App\Http\Controllers\Api\UserController;
+use App\Http\Middleware\VerifySanjadRequest;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,8 +21,8 @@ use App\Http\Controllers\Api\FileActivityLogController;
 */
 
 // Public routes (no authentication required)
-//Route::get('test', [AuthController::class, 'test']);
-//Route::post('register', [AuthController::class, 'register']);
+// Route::get('test', [AuthController::class, 'test']);
+// Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
 
 Route::get('clear', [AuthController::class, 'clear']);
@@ -38,13 +38,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/files/cache/options/clear', [FileController::class, 'clearOptionsCache']);
     Route::delete('/files', [FileController::class, 'delete']);
 
-
     // مسیر آپلود: محدودیت را برداریم یا خیلی زیاد کنیم
     // 'throttle:60,1' یعنی ۶۰ درخواست در هر دقیقه (برای آپلود چانکی کم است)
     // پس از میدلور throttle استفاده نمی‌کنیم
     Route::post('/files/upload', [FileController::class, 'upload'])
         ->middleware('throttle:file-upload');
-
 
     Route::apiResource('users', '\\'.UserController::class);
     Route::apiResource('permissions', '\\'.PermissionController::class);
@@ -57,8 +55,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('file-activity-logs', [FileActivityLogController::class, 'index']);
     Route::get('file-activity-logs/{fileActivityLog}', [FileActivityLogController::class, 'show']);
+
+    Route::get('/sanjad/classes', [SanjadConnectorController::class, 'getClasses']);
+    Route::get('/sanjad/classes/database', [SanjadConnectorController::class, 'index']);
+    Route::post('/sanjad/classes/sync', [SanjadConnectorController::class, 'syncClasses']);
+    Route::get('/sanjad/classes/{sanjadClass}/permissions', [SanjadConnectorController::class, 'classPermissions']);
+    Route::post('/sanjad/classes/{sanjadClass}/permissions', [SanjadConnectorController::class, 'grantClassPermission']);
+    Route::delete('/sanjad/classes/{sanjadClass}/permissions', [SanjadConnectorController::class, 'revokeClassPermission']);
 });
 
-
 // روت ورودی که سرور سنجاد برای گرفتن فایل‌های یک کلاس صدا می‌زند (محافظت شده با میدلور اختصاصی)
-Route::middleware(VerifySanjadRequest::class)->get('/sanjad/classes/{classId}/files', [SanjadConnectorController::class, 'getFilesByClassId']);
+Route::middleware(VerifySanjadRequest::class)->prefix('sanjad')->group(function () {
+    Route::get('/classes/{classId}/files', [SanjadConnectorController::class, 'getFilesByClassId']);
+    Route::post('/classes/files-tree', [SanjadConnectorController::class, 'getFilesByClassIds']);
+});

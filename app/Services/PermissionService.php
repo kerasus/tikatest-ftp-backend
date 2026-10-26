@@ -227,11 +227,11 @@ class PermissionService
         try {
             return $user->hasPermissionTo($permissionName, 'web');
         } catch (PermissionDoesNotExist $e) {
-            \Log::warning('Permission does not exist while checking access.', [
-                'user_id' => $user->id,
-                'permission' => $permissionName,
-                'guard' => 'web',
-            ]);
+//            \Log::warning('Permission does not exist while checking access.', [
+//                'user_id' => $user->id,
+//                'permission' => $permissionName,
+//                'guard' => 'web',
+//            ]);
 
             return false;
         }
