@@ -500,7 +500,7 @@ class FileController extends Controller
     {
         $normalizedPath = $this->permissionService->normalizeBrowsePath($path);
 
-        return FileTransferService::getListCacheKey($normalizedPath);
+        return FileManagerService::getListCacheKey($normalizedPath);
     }
 
     private function directoryOfFile(string $filePath): string

@@ -199,33 +199,22 @@ class FileTransferService
                 throw new Exception("خطا در انتقال فایل به FTP بعد از چند تلاش.");
             }
 
+            // فلاش کردن دقیق کش پوشه بعد از آپلود موفق
             $directory = dirname($finalFtpPath);
+            $dirNormalized = '/' . trim($directory, '/');
 
-            $cacheKey = self::getListCacheKey($directory);
-            $ftpCacheKey = SanjadSyncService::getFtpCacheKey($directory);
+            // پاک کردن کش فایل‌منیجر (با کلید هماهنگ)
+            Cache::forget(FileManagerService::getListCacheKey($dirNormalized));
 
-            Cache::forget($cacheKey);
-            Cache::forget($ftpCacheKey);
+            // پاک کردن کش سینک سانجاد
+            if (class_exists(SanjadSyncService::class) && method_exists(SanjadSyncService::class, 'getFtpCacheKey')) {
+                Cache::forget(SanjadSyncService::getFtpCacheKey($dirNormalized));
+            }
 
             // حذف فایل merge شده
             unlink($mergedPath);
 
-//        // بازگرداندن نشانگر به ابتدای فایل برای خواندن
-//        rewind($stream);
-//
-//        // ۴. انتقال به FTP
-//        // متد writeStream فایل را مستقیم از استریم به FTP می‌فرستد
-//        $success = $this->ftpDisk->writeStream($finalFtpPath, $stream);
-//
-//        // بستن استریم
-//        fclose($stream);
-//
-//        if (!$success) {
-//            \Log::error("FTP writeStream returned false for path: " . $finalFtpPath);
-//            throw new Exception("خطا در انتقال فایل به سرور FTP.");
-//        }
-
-            // // ۵. پاکسازی فایل‌های موقت از سرور لاراول
+            // ۵. پاکسازی فایل‌های موقت از سرور لاراول
             $this->localDisk->deleteDirectory($tempPath);
 
             return [
@@ -363,10 +352,5 @@ class FileTransferService
             flock($handle, LOCK_UN);
             fclose($handle);
         }
-    }
-
-    public static function getListCacheKey(string $path): string
-    {
-        return 'ftp_list_' . md5('/' . trim($path, '/'));
     }
 }
